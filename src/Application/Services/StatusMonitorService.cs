@@ -46,6 +46,7 @@ public class StatusMonitorService : BackgroundService
                 {
                     _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,_currentSteamStatus , steamResult.Status);
                     _currentSteamStatus = ServiceStatus.Ok;
+
                 }
             }
             else
