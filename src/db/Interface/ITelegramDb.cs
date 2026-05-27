@@ -1,6 +1,3 @@
-using Microsoft.EntityFrameworkCore.ChangeTracking;
-using Steamstatus.Infrastructure.Telegram;
-
 namespace Steamstatus.db.Interface;
 
 public interface ITelegramDb<T> : IDisposable where T : class

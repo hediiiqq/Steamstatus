@@ -80,7 +80,7 @@ public class StatusMonitorService : BackgroundService
                     _currentDotaStatus = ServiceStatus.Down;
                 }
             }
-            await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
         }
     }
 }

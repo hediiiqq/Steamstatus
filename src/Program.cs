@@ -12,6 +12,7 @@ using Steamstatus.Infrastructure.Telegram;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 
 var srcPath = Path.GetFullPath(
@@ -46,7 +47,12 @@ var host = Host.CreateDefaultBuilder(args).ConfigureServices((context, services)
 
 
 using var cts = new CancellationTokenSource();
-var bot = new TelegramBotClient(config["Telegram:BotToken"], cancellationToken: cts.Token);
+var TgToken = config["Telegram:BotToken"];
+if (string.IsNullOrWhiteSpace(TgToken))
+{
+    throw new InvalidOperationException("Telegram Bot Token is missing");
+}
+var bot = new TelegramBotClient(TgToken, cancellationToken: cts.Token);
 bot.OnMessage += OnMessage;
 
 async Task OnMessage(Message msg, UpdateType type)
@@ -74,11 +80,11 @@ async Task OnMessage(Message msg, UpdateType type)
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ITelegramDb<TelegramModel>>();
 
-        var subscrider = new TelegramModel()
+        var subscriber = new TelegramModel()
         {
             Id = msg.Chat.Id
         };
-        var delete = db.Delete(subscrider);
+        var delete = db.Delete(subscriber);
         db.SaveChanges();
 
         var answer = delete
@@ -87,6 +93,11 @@ async Task OnMessage(Message msg, UpdateType type)
         await bot.SendMessage(msg.Chat.Id, answer);
         return;
     };
+    var sent = await bot.SendMessage(msg.Chat.Id, "123", replyMarkup: new InlineKeyboardButton[]
+    {
+        new ("switch_inline_query", InlineButtonType.SwitchInlineQuery),
+        new ("switch_inline_current_chat", InlineButtonType.SwitchInlineQueryCurrentChat),
+    });
     await bot.SendMessage(msg.Chat, $"{msg.From} said : {msg.Text}");
 }
 
