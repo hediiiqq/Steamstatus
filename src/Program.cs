@@ -20,32 +20,34 @@ var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.dev.json")
     .Build();
 
+var tgToken = config["Telegram:BotToken"];
+if (string.IsNullOrWhiteSpace(tgToken))
+{
+    throw new InvalidOperationException("Telegram Bot Token is missing");
+}
+
+var steamApi = config["Steam:Api"];
+
+if (string.IsNullOrWhiteSpace(steamApi))
+{
+    throw new InvalidOperationException("Steam API URL is missing");
+}
 
 var host = Host.CreateDefaultBuilder(args).ConfigureServices((context, services) =>
     {
-        services.Configure<MonitoringOptions>(config.GetSection("Monitoring"));
         services.AddHostedService<StatusMonitorService>();
         services.AddHostedService<TelegramUpdateService>();
+
         services.AddSingleton<ISteamStatusClient, SteamWebApiStatusClient>();
+        services.AddSingleton(new TelegramBotClient(tgToken));
+        services.AddSingleton<IDotaCoordinatorClient>(new DotaCoordinatorClient(steamApi));
+
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
+
         services.AddScoped<ITelegramDb<TelegramModel>, DbBaseCD>();
         services.AddScoped<ITelegramNotifier, TelegramNotifier>();
-        var tgToken = config["Telegram:BotToken"];
-        if (string.IsNullOrWhiteSpace(tgToken))
-        {
-            throw new InvalidOperationException("Telegram Bot Token is missing");
-        }
-        services.AddSingleton(new TelegramBotClient(tgToken));
 
-        var steamApi = config["Steam:Api"];
-
-        if (string.IsNullOrWhiteSpace(steamApi))
-        {
-            throw new InvalidOperationException("Steam API URL is missing");
-        }
-
-        services.AddSingleton<IDotaCoordinatorClient>(new DotaCoordinatorClient(steamApi));
     })
     .Build();
 await host.RunAsync();
