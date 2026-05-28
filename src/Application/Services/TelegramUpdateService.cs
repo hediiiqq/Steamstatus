@@ -73,6 +73,5 @@ public class TelegramUpdateService : BackgroundService
             _logger.LogInformation("{user} - unsubscribed to notify", subscriber.Id);
             await _bot.SendMessage(msg.Chat.Id, answer);
         }
-
     }
 }

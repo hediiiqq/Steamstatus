@@ -41,12 +41,12 @@ var host = Host.CreateDefaultBuilder(args).ConfigureServices((context, services)
         services.AddSingleton<ISteamStatusClient, SteamWebApiStatusClient>();
         services.AddSingleton(new TelegramBotClient(tgToken));
         services.AddSingleton<IDotaCoordinatorClient>(new DotaCoordinatorClient(steamApi));
+        services.AddSingleton<ITelegramNotifier, TelegramNotifier>();
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
         services.AddScoped<ITelegramDb<TelegramModel>, DbBaseCD>();
-        services.AddScoped<ITelegramNotifier, TelegramNotifier>();
 
     })
     .Build();
