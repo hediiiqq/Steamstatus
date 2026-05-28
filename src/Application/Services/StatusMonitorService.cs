@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using Steamstatus.Domain.Enums;
 using Steamstatus.Infrastructure.Dota;
 using Steamstatus.Infrastructure.Steam;
+using Steamstatus.Infrastructure.Telegram;
+
 
 namespace Steamstatus.Application.Services;
 
@@ -11,13 +13,15 @@ public class StatusMonitorService : BackgroundService
     private readonly ILogger<StatusMonitorService> _logger;
     private readonly ISteamStatusClient _steamStatusClient;
     private readonly IDotaCoordinatorClient _dotaCoordinatorClient;
+    private readonly ITelegramNotifier _telegramNotifier;
 
     public StatusMonitorService(ILogger<StatusMonitorService> logger, ISteamStatusClient steamStatusClient,
-        IDotaCoordinatorClient dotaCoordinatorClient)
+        IDotaCoordinatorClient dotaCoordinatorClient, ITelegramNotifier telegramNotifier)
     {
         _logger = logger;
         _steamStatusClient = steamStatusClient;
         _dotaCoordinatorClient = dotaCoordinatorClient;
+        _telegramNotifier = telegramNotifier;
     }
 
     private int _okSteam = 0;
@@ -44,9 +48,11 @@ public class StatusMonitorService : BackgroundService
                 _downSteam = 0;
                 if (_okSteam >= 2 && _currentSteamStatus != ServiceStatus.Ok)
                 {
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,_currentSteamStatus , steamResult.Status);
+                    await _telegramNotifier.NotifyStatusChangedAsync(steamResult.ServiceName, _currentSteamStatus,
+                        ServiceStatus.Ok, stoppingToken);
+                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,
+                        _currentSteamStatus, steamResult.Status);
                     _currentSteamStatus = ServiceStatus.Ok;
-
                 }
             }
             else
@@ -55,7 +61,10 @@ public class StatusMonitorService : BackgroundService
                 _okSteam = 0;
                 if (_downSteam >= 3 && _currentSteamStatus != ServiceStatus.Down)
                 {
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,_currentSteamStatus , steamResult.Status);
+                    await _telegramNotifier.NotifyStatusChangedAsync(steamResult.ServiceName, _currentSteamStatus,
+                        ServiceStatus.Down, stoppingToken);
+                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,
+                        _currentSteamStatus, steamResult.Status);
                     _currentSteamStatus = ServiceStatus.Down;
                 }
             }
@@ -66,7 +75,10 @@ public class StatusMonitorService : BackgroundService
                 _downDota = 0;
                 if (_okDota >= 2 && _currentDotaStatus != ServiceStatus.Ok)
                 {
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,_currentDotaStatus , dotaResult.Status);
+                    await _telegramNotifier.NotifyStatusChangedAsync(dotaResult.ServiceName, _currentDotaStatus,
+                        ServiceStatus.Ok, stoppingToken);
+                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,
+                        _currentDotaStatus, dotaResult.Status);
                     _currentDotaStatus = ServiceStatus.Ok;
                 }
             }
@@ -76,11 +88,15 @@ public class StatusMonitorService : BackgroundService
                 _okDota = 0;
                 if (_downDota >= 3 && _currentDotaStatus != ServiceStatus.Down)
                 {
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,_currentDotaStatus , dotaResult.Status);
+                    await _telegramNotifier.NotifyStatusChangedAsync(dotaResult.ServiceName, _currentDotaStatus,
+                        ServiceStatus.Down, stoppingToken);
+                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,
+                        _currentDotaStatus, dotaResult.Status);
                     _currentDotaStatus = ServiceStatus.Down;
                 }
             }
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+
+            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
         }
     }
 }
