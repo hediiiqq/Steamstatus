@@ -17,7 +17,7 @@ var srcPath = Path.GetFullPath(
 
 var config = new ConfigurationBuilder()
     .SetBasePath(srcPath)
-    .AddJsonFile("appsettings.dev.json")
+    .AddJsonFile("appsettings.json")
     .Build();
 
 var tgToken = config["Telegram:BotToken"];
