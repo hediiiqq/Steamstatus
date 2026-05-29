@@ -2,12 +2,12 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Steamstatus.Application.Services;
 using Steamstatus.Configuration;
 using Steamstatus.db;
 using Steamstatus.db.Interface;
-using Steamstatus.Infrastructure.Steam;
-using Steamstatus.Infrastructure.Dota;
+using Steamstatus.Infrastructure.Http;
 using Steamstatus.Infrastructure.Telegram;
 using Telegram.Bot;
 
@@ -38,16 +38,16 @@ var host = Host.CreateDefaultBuilder(args).ConfigureServices((context, services)
         services.AddHostedService<StatusMonitorService>();
         services.AddHostedService<TelegramUpdateService>();
 
-        services.AddSingleton<ISteamStatusClient, SteamWebApiStatusClient>();
+        services.Configure<MonitoringOptions>(config.GetSection("Monitoring"));
+
         services.AddSingleton(new TelegramBotClient(tgToken));
-        services.AddSingleton<IDotaCoordinatorClient>(new DotaCoordinatorClient(steamApi));
         services.AddSingleton<ITelegramNotifier, TelegramNotifier>();
+        services.AddSingleton<IServiceStatusClient, HttpServiceStatusClient>();
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
         services.AddScoped<ITelegramDb<TelegramModel>, DbBaseCD>();
-
     })
     .Build();
 await host.RunAsync();

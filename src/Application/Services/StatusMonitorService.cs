@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Steamstatus.Configuration;
 using Steamstatus.Domain.Enums;
-using Steamstatus.Infrastructure.Dota;
-using Steamstatus.Infrastructure.Steam;
+using Steamstatus.Infrastructure.Http;
 using Steamstatus.Infrastructure.Telegram;
 
 
@@ -11,92 +12,73 @@ namespace Steamstatus.Application.Services;
 public class StatusMonitorService : BackgroundService
 {
     private readonly ILogger<StatusMonitorService> _logger;
-    private readonly ISteamStatusClient _steamStatusClient;
-    private readonly IDotaCoordinatorClient _dotaCoordinatorClient;
+    private readonly IServiceStatusClient _serviceStatusClient;
+    private readonly MonitoringOptions _monitoringOptions;
     private readonly ITelegramNotifier _telegramNotifier;
+    private readonly Dictionary<string, ServiceMonitorState> _states = new();
 
-    public StatusMonitorService(ILogger<StatusMonitorService> logger, ISteamStatusClient steamStatusClient,
-        IDotaCoordinatorClient dotaCoordinatorClient, ITelegramNotifier telegramNotifier)
+    public StatusMonitorService(ILogger<StatusMonitorService> logger, IServiceStatusClient serviceStatusClient,
+        IOptions<MonitoringOptions> monitoringOptions,
+        ITelegramNotifier telegramNotifier)
     {
         _logger = logger;
-        _steamStatusClient = steamStatusClient;
-        _dotaCoordinatorClient = dotaCoordinatorClient;
+        _serviceStatusClient = serviceStatusClient;
+        _monitoringOptions = monitoringOptions.Value;
         _telegramNotifier = telegramNotifier;
     }
 
-    private int _okSteam = 0;
-    private int _downSteam = 0;
-    private ServiceStatus _currentSteamStatus = ServiceStatus.Ok;
-
-    private int _okDota = 0;
-    private int _downDota = 0;
-    private ServiceStatus _currentDotaStatus = ServiceStatus.Ok;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var steamResult = await _steamStatusClient.CheckSteamApiAsync(stoppingToken);
-            var dotaResult = await _dotaCoordinatorClient.CheckDotaAsync(stoppingToken);
-
-            _logger.LogInformation("{Service}: {Status}", steamResult.ServiceName, steamResult.Status);
-            _logger.LogInformation("{Service}: {Status}", dotaResult.ServiceName, dotaResult.Status);
-
-            if (steamResult.Status == ServiceStatus.Ok)
+            foreach (var endpoint in _monitoringOptions.Services)
             {
-                _okSteam += 1;
-                _downSteam = 0;
-                if (_okSteam >= 2 && _currentSteamStatus != ServiceStatus.Ok)
+                var result = await _serviceStatusClient.CheckServiceStatusAsync(endpoint, stoppingToken);
+                if (!_states.TryGetValue(result.ServiceName, out var state))
                 {
-                    await _telegramNotifier.NotifyStatusChangedAsync(steamResult.ServiceName, _currentSteamStatus,
-                        ServiceStatus.Ok, stoppingToken);
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,
-                        _currentSteamStatus, steamResult.Status);
-                    _currentSteamStatus = ServiceStatus.Ok;
+                    state = new ServiceMonitorState();
+                    _states[result.ServiceName] = state;
+                }
+
+                if (result.Status == ServiceStatus.Ok)
+                {
+                    state.SuccessCount++;
+                    state.FailureCount = 0;
+                    if (result.Status == ServiceStatus.Ok &&
+                        state.SuccessCount >= _monitoringOptions.RecoveryThreshold &&
+                        state.CurrentStatus != ServiceStatus.Ok)
+                    {
+                        await _telegramNotifier.NotifyStatusChangedAsync(result.ServiceName, state.CurrentStatus,
+                            ServiceStatus.Ok, stoppingToken);
+                        _logger.LogInformation("{Service}:{curStatus} -> {Status}", result.ServiceName,
+                            state.CurrentStatus, result.Status);
+                        state.CurrentStatus = ServiceStatus.Ok;
+                    }
+                }
+                else
+                {
+                    state.FailureCount++;
+                    state.SuccessCount = 0;
+                    if (result.Status == ServiceStatus.Down &&
+                        state.FailureCount >= _monitoringOptions.FailureThreshold &&
+                        state.CurrentStatus != ServiceStatus.Down)
+                    {
+                        await _telegramNotifier.NotifyStatusChangedAsync(result.ServiceName, state.CurrentStatus,
+                            ServiceStatus.Down, stoppingToken);
+                        _logger.LogInformation("{Service}:{curStatus} -> {Status}", result.ServiceName,
+                            state.CurrentStatus, result.Status);
+                        state.CurrentStatus = ServiceStatus.Down;
+                    }
                 }
             }
-            else
-            {
-                _downSteam += 1;
-                _okSteam = 0;
-                if (_downSteam >= 3 && _currentSteamStatus != ServiceStatus.Down)
-                {
-                    await _telegramNotifier.NotifyStatusChangedAsync(steamResult.ServiceName, _currentSteamStatus,
-                        ServiceStatus.Down, stoppingToken);
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", steamResult.ServiceName,
-                        _currentSteamStatus, steamResult.Status);
-                    _currentSteamStatus = ServiceStatus.Down;
-                }
-            }
-
-            if (dotaResult.Status == ServiceStatus.Ok)
-            {
-                _okDota += 1;
-                _downDota = 0;
-                if (_okDota >= 2 && _currentDotaStatus != ServiceStatus.Ok)
-                {
-                    await _telegramNotifier.NotifyStatusChangedAsync(dotaResult.ServiceName, _currentDotaStatus,
-                        ServiceStatus.Ok, stoppingToken);
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,
-                        _currentDotaStatus, dotaResult.Status);
-                    _currentDotaStatus = ServiceStatus.Ok;
-                }
-            }
-            else
-            {
-                _downDota += 1;
-                _okDota = 0;
-                if (_downDota >= 3 && _currentDotaStatus != ServiceStatus.Down)
-                {
-                    await _telegramNotifier.NotifyStatusChangedAsync(dotaResult.ServiceName, _currentDotaStatus,
-                        ServiceStatus.Down, stoppingToken);
-                    _logger.LogInformation("{Service}: {curStatus} -> {Status}", dotaResult.ServiceName,
-                        _currentDotaStatus, dotaResult.Status);
-                    _currentDotaStatus = ServiceStatus.Down;
-                }
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            // poling interval
+            var baseInterval = _monitoringOptions.IntervalSeconds;
+            var hasDownService = _states.Values.Any(state => state.CurrentStatus == ServiceStatus.Down);
+            var delaySeconds = hasDownService
+                ? Math.Max(1, baseInterval / 3) //
+                : baseInterval;
+            await Task.Delay(TimeSpan.FromSeconds(delaySeconds), stoppingToken);
         }
     }
 }
