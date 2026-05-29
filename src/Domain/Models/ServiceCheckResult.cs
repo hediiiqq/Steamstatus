@@ -9,5 +9,5 @@ public class ServiceCheckResult
     public string? ErrorMessage { get; set; }
     public DateTimeOffset Checked { get; init; } = DateTimeOffset.UtcNow;
 
-    public bool IsAvalible => Status == ServiceStatus.Ok;
+    public bool IsAvailable => Status == ServiceStatus.Ok;
 }

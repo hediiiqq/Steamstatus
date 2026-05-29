@@ -45,14 +45,21 @@ public class StatusMonitorService : BackgroundService
                 {
                     state.SuccessCount++;
                     state.FailureCount = 0;
+                    _logger.LogInformation(
+                        "Checked {Service}: {Status}",
+                        result.ServiceName,
+                        result.Status);
                     if (result.Status == ServiceStatus.Ok &&
                         state.SuccessCount >= _monitoringOptions.RecoveryThreshold &&
                         state.CurrentStatus != ServiceStatus.Ok)
                     {
                         await _telegramNotifier.NotifyStatusChangedAsync(result.ServiceName, state.CurrentStatus,
                             ServiceStatus.Ok, stoppingToken);
-                        _logger.LogInformation("{Service}:{curStatus} -> {Status}", result.ServiceName,
-                            state.CurrentStatus, result.Status);
+                        _logger.LogWarning(
+                            "{Service} status changed: {OldStatus} -> {NewStatus}",
+                            result.ServiceName,
+                            state.CurrentStatus,
+                            ServiceStatus.Down);
                         state.CurrentStatus = ServiceStatus.Ok;
                     }
                 }
@@ -60,18 +67,26 @@ public class StatusMonitorService : BackgroundService
                 {
                     state.FailureCount++;
                     state.SuccessCount = 0;
+                    _logger.LogInformation(
+                        "Checked {Service}: {Status}",
+                        result.ServiceName,
+                        result.Status);
                     if (result.Status == ServiceStatus.Down &&
                         state.FailureCount >= _monitoringOptions.FailureThreshold &&
                         state.CurrentStatus != ServiceStatus.Down)
                     {
                         await _telegramNotifier.NotifyStatusChangedAsync(result.ServiceName, state.CurrentStatus,
                             ServiceStatus.Down, stoppingToken);
-                        _logger.LogInformation("{Service}:{curStatus} -> {Status}", result.ServiceName,
-                            state.CurrentStatus, result.Status);
+                        _logger.LogWarning(
+                            "{Service} status changed: {OldStatus} -> {NewStatus}",
+                            result.ServiceName,
+                            state.CurrentStatus,
+                            ServiceStatus.Down);
                         state.CurrentStatus = ServiceStatus.Down;
                     }
                 }
             }
+
             // poling interval
             var baseInterval = _monitoringOptions.IntervalSeconds;
             var hasDownService = _states.Values.Any(state => state.CurrentStatus == ServiceStatus.Down);

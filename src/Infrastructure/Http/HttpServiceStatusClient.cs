@@ -6,14 +6,18 @@ namespace Steamstatus.Infrastructure.Http;
 
 public class HttpServiceStatusClient : IServiceStatusClient
 {
-    private static readonly HttpClient HttpClient = new();
+    private static HttpClient _httpClient;
+    public HttpServiceStatusClient(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+    }
 
     public async Task<ServiceCheckResult> CheckServiceStatusAsync(ServiceEndpointOptions endpoint,
         CancellationToken cancellationToken)
     {
         try
         {
-            var response = await HttpClient.GetAsync(endpoint.Url, cancellationToken);
+            var response = await _httpClient.GetAsync(endpoint.Url, cancellationToken);
             var statusCode = (int)response.StatusCode;
             if (endpoint.ExpectedStatusCodes.Contains(statusCode))
             {
