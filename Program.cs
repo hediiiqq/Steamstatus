@@ -16,7 +16,7 @@ using Telegram.Bot;
 var host = Host.CreateDefaultBuilder(args).ConfigureAppConfiguration((context, config) =>
     {
         config.SetBasePath(AppContext.BaseDirectory);
-        config.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+        config.AddJsonFile("appsettings.dev.json", optional: true, reloadOnChange: true);
     }).ConfigureLogging(logging =>
     {
         logging.ClearProviders();
@@ -53,7 +53,7 @@ var host = Host.CreateDefaultBuilder(args).ConfigureAppConfiguration((context, c
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
 
-        services.AddScoped<ITelegramDb<TelegramModel>, DbBaseCD>();
+        services.AddScoped<ISubscriberRepository<TelegramModel>, SubscriberRepository>();
     })
     .Build();
 await host.RunAsync();

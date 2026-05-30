@@ -20,8 +20,8 @@ public class TelegramNotifier : ITelegramNotifier
         CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ITelegramDb<TelegramModel>>();
-        var subscribers =  db.GetAllList();
+        var db = scope.ServiceProvider.GetRequiredService<ISubscriberRepository<TelegramModel>>();
+        var subscribers =  db.GetAll();
         var title = newStatus == ServiceStatus.Down
             ? $"⚠️ {serviceName} недоступен"
             : $"✅ {serviceName} восстановлен";
