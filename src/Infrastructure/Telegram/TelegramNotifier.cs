@@ -21,7 +21,7 @@ public class TelegramNotifier : ITelegramNotifier
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ISubscriberRepository<TelegramModel>>();
-        var subscribers =  db.GetAll();
+        var subscribers =  db.GetByServiceName(serviceName);
         var title = newStatus == ServiceStatus.Down
             ? $"⚠️ {serviceName} недоступен"
             : $"✅ {serviceName} восстановлен";
@@ -29,7 +29,7 @@ public class TelegramNotifier : ITelegramNotifier
 
         foreach (var subscriber in subscribers)
         {
-            await _bot.SendMessage(subscriber.Id, message, cancellationToken: cancellationToken);
+            await _bot.SendMessage(subscriber.ChatId, message, cancellationToken: cancellationToken);
         }
     }
 }

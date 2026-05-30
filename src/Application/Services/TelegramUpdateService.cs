@@ -18,6 +18,8 @@ public class TelegramUpdateService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TelegramUpdateService> _logger;
     private readonly MonitoringOptions _options;
+    private readonly Dictionary<long, DateTimeOffset> _lastSubscriptionActions = new();
+    private static readonly TimeSpan SubscriptionActionCooldown = TimeSpan.FromSeconds(10);
 
     public TelegramUpdateService(
         TelegramBotClient bot,
@@ -78,6 +80,16 @@ public class TelegramUpdateService : BackgroundService
         var db = scope.ServiceProvider.GetRequiredService<ISubscriberRepository<TelegramModel>>();
         var chatId = query.Message.Chat.Id;
 
+        var now = DateTimeOffset.UtcNow;
+        if (_lastSubscriptionActions.TryGetValue(chatId, out var lastAction) &&
+            now - lastAction < SubscriptionActionCooldown)
+        {
+            await _bot.SendMessage(chatId, "Подожди несколько секунд перед следующим действием.");
+            return;
+        }
+
+        _lastSubscriptionActions[chatId] = now;
+
         var data = query.Data;
         var parts = data.Split("|");
         var action = parts[0];
@@ -91,17 +103,19 @@ public class TelegramUpdateService : BackgroundService
                 ? $"You subscribed to {serviceId}"
                 : $"You all ready subscribed to  {serviceId}";
             await _bot.SendMessage(chatId, answer);
+            _logger.LogInformation($"{chatId} subscribed {serviceId}");
         }
 
         if (action == "Unsubscribe")
         {
-            var deleted = db.Delete(chatId,serviceId);
+            var deleted = db.Delete(chatId, serviceId);
             db.Delete(chatId, serviceId);
             db.SaveChanges();
             var answer = deleted
                 ? $"You unsubscribed to {serviceId}"
                 : $"You all ready unsubscribed to  {serviceId}";
             await _bot.SendMessage(chatId, answer);
+            _logger.LogInformation($"{chatId} unsubscribed {serviceId}");
         }
     }
 
